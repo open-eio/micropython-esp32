@@ -29,10 +29,17 @@
 #ifndef INCLUDED_MPHALPORT_H
 #define INCLUDED_MPHALPORT_H
 
+#include "freertos/FreeRTOS.h"
 #include "py/ringbuf.h"
 #include "lib/utils/interrupt_char.h"
 
 extern ringbuf_t stdin_ringbuf;
+
+// Note: these "critical nested" macros do not ensure cross-CPU exclusion,
+// the only disable interrupts on the current CPU.  To full manage exclusion
+// one should use portENTER_CRITICAL/portEXIT_CRITICAL instead.
+#define disable_irq() portENTER_CRITICAL_NESTED()
+#define enable_irq(irq_state) portEXIT_CRITICAL_NESTED(irq_state)
 
 uint32_t mp_hal_ticks_us(void);
 __attribute__((always_inline)) static inline uint32_t mp_hal_ticks_cpu(void) {
@@ -56,6 +63,7 @@ uint32_t mp_hal_get_cpu_freq(void);
 #define mp_hal_pin_obj_t gpio_num_t
 mp_hal_pin_obj_t machine_pin_get_id(mp_obj_t pin_in);
 #define mp_hal_get_pin_obj(o) machine_pin_get_id(o)
+#define mp_obj_get_pin(o) machine_pin_get_id(o) // legacy name; only to support esp8266/modonewire
 #define mp_hal_pin_name(p) (p)
 static inline void mp_hal_pin_input(mp_hal_pin_obj_t pin) {
     gpio_set_direction(pin, GPIO_MODE_INPUT);

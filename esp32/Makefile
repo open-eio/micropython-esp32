@@ -29,8 +29,8 @@ ESPCOMP = $(ESPIDF)/components
 ESPTOOL ?= $(ESPCOMP)/esptool_py/esptool/esptool.py
 
 # verify the ESP IDF version
-ESPIDF_SUPHASH := 13dfb5568dcc30aa43363c49f7a4505d04036424
-ESPIDF_CURHASH := $(shell git -C $(ESPIDF) show --pretty=format:'%H')
+ESPIDF_SUPHASH := c06cc31d85cc700e1dbddbe527d4282c4bc5845a
+ESPIDF_CURHASH := $(shell git -C $(ESPIDF) show -s --pretty=format:'%H')
 ifneq ($(ESPIDF_CURHASH),$(ESPIDF_SUPHASH))
 $(info ** WARNING **)
 $(info The git hash of ESP IDF does not match the supported version)
@@ -116,6 +116,7 @@ SRC_C = \
 	mphalport.c \
 	fatfs_port.c \
 	help.c \
+	esponewire.c \
 	modutime.c \
 	moduos.c \
 	machine_pin.c \
@@ -126,11 +127,16 @@ SRC_C = \
 	modnetwork.c \
 	modsocket.c \
 	modesp.c \
+	espneopixel.c \
 	$(SRC_MOD)
 
 STM_SRC_C = $(addprefix stmhal/,\
 	pybstdio.c \
 	input.c \
+	)
+
+ESP8266_SRC_C = $(addprefix esp8266/,\
+	modonewire.c \
 	)
 
 EXTMOD_SRC_C = $(addprefix extmod/,\
@@ -169,18 +175,20 @@ LIB_SRC_C += \
 endif
 
 DRIVERS_SRC_C = $(addprefix drivers/,\
+	dht/dht.c \
 	)
 
 OBJ_MP =
 OBJ_MP += $(PY_O)
 OBJ_MP += $(addprefix $(BUILD)/, $(SRC_C:.c=.o))
 OBJ_MP += $(addprefix $(BUILD)/, $(STM_SRC_C:.c=.o))
+OBJ_MP += $(addprefix $(BUILD)/, $(ESP8266_SRC_C:.c=.o))
 OBJ_MP += $(addprefix $(BUILD)/, $(EXTMOD_SRC_C:.c=.o))
 OBJ_MP += $(addprefix $(BUILD)/, $(LIB_SRC_C:.c=.o))
 OBJ_MP += $(addprefix $(BUILD)/, $(DRIVERS_SRC_C:.c=.o))
 
 # List of sources for qstr extraction
-SRC_QSTR += $(SRC_C) $(STM_SRC_C) $(EXTMOD_SRC_C) $(DRIVERS_SRC_C)
+SRC_QSTR += $(SRC_C) $(STM_SRC_C) $(ESP8266_SRC_C) $(EXTMOD_SRC_C) $(DRIVERS_SRC_C)
 # Append any auto-generated sources that are needed by sources listed in SRC_QSTR
 SRC_QSTR_AUTO_DEPS +=
 
@@ -531,16 +539,20 @@ OBJ_ESPIDF += $(addprefix $(BUILD)/, $(ESPIDF_WPA_SUPPLICANT_O))
 ################################################################################
 # Main targets
 
-all: $(BUILD)/bootloader.bin $(BUILD)/partitions.bin $(BUILD)/application.bin
+all: $(BUILD)/firmware.bin
 
 .PHONY: idf-version deploy erase
 
 idf-version:
 	$(ECHO) "ESP IDF supported hash: $(ESPIDF_SUPHASH)"
 
-deploy: $(BUILD)/bootloader.bin $(BUILD)/partitions.bin $(BUILD)/application.bin
+$(BUILD)/firmware.bin: $(BUILD)/bootloader.bin $(BUILD)/partitions.bin $(BUILD)/application.bin
+	$(ECHO) "Create $@"
+	$(Q)$(PYTHON) makeimg.py $^ $@
+
+deploy: $(BUILD)/firmware.bin
 	$(ECHO) "Writing $^ to the board"
-	$(Q)$(ESPTOOL) --chip esp32 --port $(PORT) --baud $(BAUD) write_flash -z --flash_mode $(FLASH_MODE) --flash_freq $(FLASH_FREQ) --flash_size $(FLASH_SIZE) 0x1000 $(BUILD)/bootloader.bin 0x8000 $(BUILD)/partitions.bin 0x10000 $(BUILD)/application.bin
+	$(Q)$(ESPTOOL) --chip esp32 --port $(PORT) --baud $(BAUD) write_flash -z --flash_mode $(FLASH_MODE) --flash_freq $(FLASH_FREQ) --flash_size $(FLASH_SIZE) 0 $^
 
 erase:
 	$(ECHO) "Erasing flash"
